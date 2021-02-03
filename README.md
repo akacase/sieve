@@ -2,7 +2,7 @@
 
 ![sieve](./doc/sieve.png)
 
-**sieve** tests the endpoints it's been deployed on whether or not they act like are leaky, like a _sieve_. 
+**sieve** tests the endpoints it's been deployed on if they are leaky 💦, like a _sieve_. 
 
 
 pros:
@@ -13,7 +13,7 @@ pros:
 cons:
 - it might ruin your day
 
-**sieve** is a essentialy a TCP/UDP blast, it ACKs out to a single host (a webserver) trying to poke out of typical ports, right now these default to.
+**sieve** is a essentialy a TCP/UDP blast, it ACKs out to a single host (a web server) trying to poke out of typical ports, right now these default to:
 
 ```haskell
 ports :: [String]
@@ -23,7 +23,7 @@ ports :: [String]
 If you wish to test another set of ports, just set:
 
 ```sh
-export PORTS = ["80", "443"]
+export PORTS = "80, 443"
 ```
 
 You must set a host for **sieve** to know who to ACK to:
@@ -35,11 +35,11 @@ endpoint :: String
 export ENDPOINT = "capsulecorp.org"
 ```
 
-This must not contain any protocol information, just a DNS record, kinda.
+This must not contain any protocol information, just a DNS record, without the `.`
 
 **sieve** requires two other important pieces of information to run correctly:
 
-a **secret** to symmetrically encrypt the payload it's trying to blast out
+a **secret** to symmetrically encrypt the payload it's trying to blast out:
 
 ```haskell
 secret :: String
@@ -48,7 +48,7 @@ secret :: String
 export SECRET = "sup"
 ```
 
-And last but not least, a **detection** value, this is just a shared string that you know how to cipher through the web server logs to find.
+And last but not least, a **detection** value; this is just a shared string so you can search through the web server logs to find.
 
 ```haskell
 detection :: String
@@ -57,7 +57,7 @@ detection :: String
 export DETECTION = "yo"
 ```
 
-**sieve** runs under the assumption of working on an `x86_64` platform, but can accomodate any architecture that **GHC** supports.
+**sieve** runs under the assumption that it's being dpeloyed on `x86_64`, but _should_ accomodate any architecture that **GHC** supports.
 
 _make it rain_
 
