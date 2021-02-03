@@ -57,7 +57,7 @@ detection :: String
 export DETECTION = "yo"
 ```
 
-**sieve** runs under the assumption that it's being dpeloyed on `x86_64`, but _should_ accomodate any architecture that **GHC** supports.
+**sieve** runs under the assumption that it's being deployed on `x86_64`, but _should_ accomodate any architecture that **GHC** supports.
 
 _make it rain_
 
