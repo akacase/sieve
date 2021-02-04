@@ -1,4 +1,5 @@
-{ mkDerivation, base, hostname, lib, network-info, network-simple
+{ mkDerivation, base, hostname, lib, network, network-bsd
+, network-info, network-simple
 }:
 mkDerivation {
   pname = "sieve";
@@ -7,7 +8,7 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base hostname network-info network-simple
+    base hostname network network-bsd network-info network-simple
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [ base ];
