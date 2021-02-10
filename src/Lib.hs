@@ -1,6 +1,8 @@
 module Lib
     ( someFunc
     ) where
+import Foreign.C.Types ( CInt ) 
+import qualified Data.ByteString.Char8 as C
 import Data.Bits
 import Network.Socket
     ( HostName,
@@ -15,6 +17,7 @@ import Network.Socket
 import Network.BSD ( HostName, defaultProtocol )
 import Data.List ( genericDrop )
 import Network.Socket.Address (sendTo)
+import Foreign.C
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
@@ -33,20 +36,22 @@ detection = "yo"
 
 data Handle = Handle
   { sock :: Socket,
-    program :: String,
     address :: SockAddr
   }
+
+intToCInt :: Int -> CInt
+intToCInt = fromIntegral
 
 open ::
   -- | Remote hostname, or localhost
   HostName ->
   -- | Port number or name
   String ->
-  -- | Name to log under
-  String ->
+  -- | Socket Type
+  Int ->
   -- | Handle to use for logging
   IO Handle
-open hostname port progname =
+open hostname port proto =
   do
     -- Look up the hostname and port.  Either raises an exception
     -- or returns a nonempty list.  First element in that list
@@ -55,25 +60,22 @@ open hostname port progname =
     let serveraddr = head addrinfos
 
     -- Establish a socket for communication
-    sock <- Network.Socket.socket (addrFamily serveraddr) Datagram defaultProtocol
+    sock <- Network.Socket.socket (addrFamily serveraddr) Datagram (intToCInt proto)
 
     -- Save off the socket, program name, and server address in a handle
-    return $ Handle sock progname (addrAddress serveraddr)
+    return $ Handle sock (addrAddress serveraddr)
 
   -- Now you may use connectionSocket as you please within this scope,
   -- possibly using recv and send to interact with the remote end.
 
-blast :: String -> Handle -> IO ()
-blast = send
-
---  TODO: fix message, turn into String -> ByteString
-send :: String -> Handle -> IO ()
+send :: String -> IO Handle -> IO ()
 send message handler = do
+  h <- handler
   sent <-
     sendTo
-      (sock handler)
-      message
-      (address handler)
+      (sock h)
+      (C.pack message)
+      (address h)
   send (genericDrop sent message) handler
 
 close :: Handle -> IO ()

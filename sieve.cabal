@@ -35,6 +35,7 @@ library
       base >=4.7 && <5
       , network-info
       , hostname
+      , bytestring
       , network
       , network-bsd
       , network-simple
