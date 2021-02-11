@@ -2,18 +2,20 @@ module Lib
     ( someFunc
     ) where
 import Foreign.C.Types ( CInt ) 
+import System.Timeout ( timeout )
 import qualified Data.ByteString.Char8 as C
 import Data.Bits
+import Network.Socket.Address( sendAllTo )
 import Network.Socket
     ( HostName,
       SockAddr,
       Socket,
-      AddrInfo(addrFamily, addrAddress),
+      AddrInfo(addrFamily, addrAddress, addrSocketType, addrProtocol),
       getAddrInfo,
-      SocketType(Datagram),
+      connect,
       close,
       defaultProtocol,
-      socket )
+      socket, SocketOption (SendTimeOut, UserTimeout), setSocketOption )
 import Network.BSD ( HostName, defaultProtocol )
 import Data.List ( genericDrop )
 import Network.Socket.Address (sendTo)
@@ -39,31 +41,27 @@ data Handle = Handle
     address :: SockAddr
   }
 
-intToCInt :: Int -> CInt
-intToCInt = fromIntegral
-
 open ::
   -- | Remote hostname, or localhost
   HostName ->
   -- | Port number or name
   String ->
-  -- | Socket Type
-  Int ->
   -- | Handle to use for logging
   IO Handle
-open hostname port proto =
+open hostname port =
   do
     -- Look up the hostname and port.  Either raises an exception
     -- or returns a nonempty list.  First element in that list
     -- is supposed to be the best option.
     addrinfos <- getAddrInfo Nothing (Just hostname) (Just port)
-    let serveraddr = head addrinfos
+    let addr = head addrinfos
 
     -- Establish a socket for communication
-    sock <- Network.Socket.socket (addrFamily serveraddr) Datagram (intToCInt proto)
+    sock <- Network.Socket.socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+    --connect sock (addrAddress addr)
 
     -- Save off the socket, program name, and server address in a handle
-    return $ Handle sock (addrAddress serveraddr)
+    return $ Handle sock (addrAddress addr)
 
   -- Now you may use connectionSocket as you please within this scope,
   -- possibly using recv and send to interact with the remote end.
@@ -71,12 +69,15 @@ open hostname port proto =
 send :: String -> IO Handle -> IO ()
 send message handler = do
   h <- handler
-  sent <-
-    sendTo
-      (sock h)
-      (C.pack message)
-      (address h)
-  send (genericDrop sent message) handler
+  sendAllTo 
+    (sock h)
+    (C.pack message)
+    (address h)
+  Network.Socket.close (sock h)
+
+blast :: String -> IO Handle -> IO (Maybe ())
+blast message handler = do
+  timeout 2000000 $ send message handler
 
 close :: Handle -> IO ()
 close handler = Network.Socket.close (sock handler)
