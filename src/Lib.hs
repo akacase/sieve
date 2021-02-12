@@ -66,18 +66,32 @@ open hostname port =
   -- Now you may use connectionSocket as you please within this scope,
   -- possibly using recv and send to interact with the remote end.
 
-send :: String -> IO Handle -> IO ()
+send :: String -> Handle -> IO ()
 send message handler = do
-  h <- handler
   sendAllTo 
-    (sock h)
+    (sock handler)
     (C.pack message)
-    (address h)
-  Network.Socket.close (sock h)
+    (address handler)
+  Network.Socket.close (sock handler)
 
-blast :: String -> IO Handle -> IO (Maybe ())
-blast message handler = do
-  timeout 2000000 $ send message handler
+blast :: String -> String -> Int -> IO (Maybe ())
+blast hostname message port = do
+  h <- open hostname (show port)
+  -- timeout of 2 seconds
+  timeout 2000000 $ send message h
 
 close :: Handle -> IO ()
 close handler = Network.Socket.close (sock handler)
+
+-- TODO: sequence_ $ blastIt "capsulecorp.org" "watup" [ 1 .. 4000 ]
+-- use that style on main, also, allow other protocols (UDP) and get a POST call together.
+blastIt :: 
+  -- | Remote hostname, or localhost
+  String -> 
+  -- | Message to send to host
+  String -> 
+  -- | Series of ports, i.e. [ 1.. 400 ] or the defined `ports` variable
+  [Int] -> [IO (Maybe ())]
+blastIt hostname message ports = fmap (\p -> blast hostname message p) ports
+
+
