@@ -6,12 +6,16 @@ import System.Timeout ( timeout )
 import qualified Data.ByteString.Char8 as C
 import Data.Bits
 import Network.Socket.Address( sendAllTo )
+import Network.Socket.ByteString (recv, sendAll)
 import Network.Socket
     ( HostName,
       SockAddr,
       Socket,
+      Family ( AF_INET ),
+      SocketType ( Stream, Raw ),
       AddrInfo(addrFamily, addrAddress, addrSocketType, addrProtocol),
       getAddrInfo,
+      defaultHints,
       connect,
       close,
       defaultProtocol,
@@ -53,13 +57,13 @@ open hostname port =
     -- Look up the hostname and port.  Either raises an exception
     -- or returns a nonempty list.  First element in that list
     -- is supposed to be the best option.
-    addrinfos <- getAddrInfo Nothing (Just hostname) (Just port)
+    let hints = defaultHints { addrSocketType = Stream, addrFamily = AF_INET }
+    addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
     let addr = head addrinfos
 
     -- Establish a socket for communication
-    sock <- Network.Socket.socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-    --connect sock (addrAddress addr)
-
+    sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+    connect sock (addrAddress addr)
     -- Save off the socket, program name, and server address in a handle
     return $ Handle sock (addrAddress addr)
 
@@ -68,10 +72,9 @@ open hostname port =
 
 send :: String -> Handle -> IO ()
 send message handler = do
-  sendAllTo 
+  sendAll
     (sock handler)
     (C.pack message)
-    (address handler)
   Network.Socket.close (sock handler)
 
 blast :: String -> String -> Int -> IO (Maybe ())
@@ -84,7 +87,7 @@ close :: Handle -> IO ()
 close handler = Network.Socket.close (sock handler)
 
 -- TODO: sequence_ $ blastIt "capsulecorp.org" "watup" [ 1 .. 4000 ]
--- use that style on main, also, allow other protocols (UDP) and get a POST call together.
+-- use that style on main, also, allow other protocols (UDP)
 blastIt :: 
   -- | Remote hostname, or localhost
   String -> 
