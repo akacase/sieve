@@ -1,10 +1,23 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveAnyClass    #-}
+
 module Lib
     ( someFunc
     ) where
+import Crypto.TripleSec ( encryptIO, decrypt )
+import GHC.Generics
 import Foreign.C.Types ( CInt ) 
+import Data.Aeson
+import Data.Aeson.Encoding
 import System.Timeout ( timeout )
 import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString               as B
+import qualified Data.ByteString.Lazy          as BL
 import Data.Bits
+import Data.Text as T
+import Network.Info 
 import Network.Socket.Address( sendAllTo )
 import Network.Socket.ByteString (recv, sendAll)
 import Network.Socket
@@ -24,6 +37,20 @@ import Network.BSD ( HostName, defaultProtocol )
 import Data.List ( genericDrop )
 import Network.Socket.Address (sendTo)
 import Foreign.C
+
+instance ToJSON NetworkInterface where
+  toJSON i = object [
+    "name" .= show (name i),
+    "ipv4" .= show (ipv4 i),
+    "ipv6"  .= show (ipv6 i) ]
+
+data Info = Info 
+ {  net :: [NetworkInterface],
+    port :: Int
+ } deriving (Show, Generic, ToJSON)
+
+password :: C.ByteString
+password = C.pack "misosoup" 
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
@@ -59,7 +86,7 @@ open hostname port =
     -- is supposed to be the best option.
     let hints = defaultHints { addrSocketType = Stream, addrFamily = AF_INET }
     addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
-    let addr = head addrinfos
+    let addr = Prelude.head addrinfos
 
     -- Establish a socket for communication
     sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
@@ -70,18 +97,24 @@ open hostname port =
   -- Now you may use connectionSocket as you please within this scope,
   -- possibly using recv and send to interact with the remote end.
 
-send :: String -> Handle -> IO ()
-send message handler = do
+toStrict :: BL.ByteString -> B.ByteString
+toStrict = B.concat . BL.toChunks
+
+send :: Info -> Handle -> IO ()
+send info handler = do
+  print (encode $ info)
+  msg <- (encryptIO password $ toStrict $ encode info)
   sendAll
     (sock handler)
-    (C.pack message)
+    msg
   Network.Socket.close (sock handler)
 
-blast :: String -> String -> Int -> IO (Maybe ())
-blast hostname message port = do
+blast :: String -> Int -> IO (Maybe ())
+blast hostname port = do
   h <- open hostname (show port)
+  inter <- interfaces
   -- timeout of 2 seconds
-  timeout 2000000 $ send message h
+  timeout 2000000 $ send (Info inter port) h
 
 close :: Handle -> IO ()
 close handler = Network.Socket.close (sock handler)
@@ -91,10 +124,12 @@ close handler = Network.Socket.close (sock handler)
 blastIt :: 
   -- | Remote hostname, or localhost
   String -> 
-  -- | Message to send to host
-  String -> 
   -- | Series of ports, i.e. [ 1.. 400 ] or the defined `ports` variable
   [Int] -> [IO (Maybe ())]
-blastIt hostname message ports = fmap (\p -> blast hostname message p) ports
+blastIt hostname ports = fmap (\p -> blast hostname p) ports
+
+interfaces :: IO [NetworkInterface]
+interfaces = do
+  getNetworkInterfaces
 
 
