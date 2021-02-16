@@ -31,7 +31,7 @@ import Network.Socket
     SockAddr,
     Socket,
     SocketOption (SendTimeOut, UserTimeout),
-    SocketType (Raw, Stream),
+    SocketType (Raw, Stream, Datagram),
     close,
     connect,
     defaultHints,
@@ -69,6 +69,8 @@ data Storable = Storable
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
+data Protocol = TCP | UDP
+
 charToWord32 :: Char -> Word32
 charToWord32 = toEnum . fromEnum
 
@@ -97,17 +99,20 @@ open ::
   HostName ->
   -- | Port number or name
   String ->
+  -- | Type of Socket to connect
+  SocketType ->
+  -- | Socket identifier
+  Int ->
   -- | Handle to use for logging
   IO Handle
-open hostname port =
+open hostname port socktype protocol =
   do
     let hints = defaultHints {addrSocketType = Stream, addrFamily = AF_INET}
     addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
     let addr = Prelude.head addrinfos
 
-    -- intToCInt 6 for TCP 17 for UDP
     -- Stream for TCP and Datagram for UDP
-    sock <- socket (addrFamily addr) Stream $ intToCInt 6
+    sock <- socket (addrFamily addr) socktype $ intToCInt protocol
     connect sock (addrAddress addr)
     return $ Handle sock (addrAddress addr)
 
@@ -123,9 +128,10 @@ send info handler = do
     msg
   Network.Socket.close (sock handler)
 
-blast :: String -> Int -> IO (Maybe ())
-blast hostname port = do
-  h <- open hostname (show port)
+blast :: String -> Int -> Protocol -> IO (Maybe ())
+blast hostname port proto  = do
+  h <- case proto of TCP -> open hostname (show port) Stream 6
+                     UDP -> open hostname (show port) Datagram 17
   inter <- interfaces
   -- timeout of 2 seconds
   timeout 2000000 $ send (Info inter port) h
@@ -140,8 +146,9 @@ blastIt ::
   String ->
   -- | Series of ports, i.e. [ 1.. 400 ] or the defined `ports` variable
   [Int] ->
+  Protocol ->
   [IO (Maybe ())]
-blastIt hostname ports = fmap (\p -> blast hostname p) ports
+blastIt hostname ports protocol = fmap (\p -> blast hostname p protocol) ports
 
 interfaces :: IO [NI.NetworkInterface]
 interfaces = do
