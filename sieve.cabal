@@ -42,6 +42,8 @@ library
       , triplesec
       , aeson
       , text
+      , split
+      , lens
   default-language: Haskell2010
 
 executable sieve-exe

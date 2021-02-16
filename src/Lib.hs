@@ -1,59 +1,76 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveAnyClass    #-}
 
 module Lib
-    ( someFunc
-    ) where
-import Crypto.TripleSec ( encryptIO, decrypt )
-import GHC.Generics
-import Foreign.C.Types ( CInt ) 
+  ( blastIt,
+  )
+where
+
+import Crypto.TripleSec (decrypt, encryptIO)
 import Data.Aeson
 import Data.Aeson.Encoding
-import System.Timeout ( timeout )
-import qualified Data.ByteString.Char8 as C
-import qualified Data.ByteString               as B
-import qualified Data.ByteString.Lazy          as BL
 import Data.Bits
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Lazy as BL
+import Data.List (genericDrop)
+import Data.List.Split
 import Data.Text as T
-import Network.Info 
-import Network.Socket.Address( sendAllTo )
-import Network.Socket.ByteString (recv, sendAll)
-import Network.Socket
-    ( HostName,
-      SockAddr,
-      Socket,
-      Family ( AF_INET ),
-      SocketType ( Stream, Raw ),
-      AddrInfo(addrFamily, addrAddress, addrSocketType, addrProtocol),
-      getAddrInfo,
-      defaultHints,
-      connect,
-      close,
-      defaultProtocol,
-      socket, SocketOption (SendTimeOut, UserTimeout), setSocketOption )
-import Network.BSD ( HostName, defaultProtocol )
-import Data.List ( genericDrop )
-import Network.Socket.Address (sendTo)
+import Data.Word
 import Foreign.C
+import Foreign.C.Types (CInt)
+import GHC.Generics
+import Network.BSD (HostName, defaultProtocol)
+import qualified Network.Info as NI
+import Network.Socket
+  ( AddrInfo (addrAddress, addrFamily, addrProtocol, addrSocketType),
+    Family (AF_INET),
+    HostName,
+    SockAddr,
+    Socket,
+    SocketOption (SendTimeOut, UserTimeout),
+    SocketType (Raw, Stream),
+    close,
+    connect,
+    defaultHints,
+    defaultProtocol,
+    getAddrInfo,
+    setSocketOption,
+    socket,
+  )
+import Network.Socket.Address (sendAllTo, sendTo)
+import Network.Socket.ByteString (recv, sendAll)
+import System.Timeout (timeout)
 
-instance ToJSON NetworkInterface where
-  toJSON i = object [
-    "name" .= show (name i),
-    "ipv4" .= show (ipv4 i),
-    "ipv6"  .= show (ipv6 i) ]
+instance ToJSON NI.NetworkInterface where
+  toJSON i =
+    object
+      [ "name" .= show (NI.name i),
+        "ipv4" .= show (NI.ipv4 i),
+        "ipv6" .= show (NI.ipv6 i)
+      ]
 
-data Info = Info 
- {  net :: [NetworkInterface],
+data Info = Info
+  { net :: [NI.NetworkInterface],
     port :: Int
- } deriving (Show, Generic, ToJSON)
+  }
+  deriving (Show, Generic, ToJSON)
+
+data Storable = Storable
+  { name :: String,
+    mac :: String,
+    ipv4 :: String,
+    ipv6 :: String
+  }
+  deriving (Show, Generic, FromJSON, ToJSON)
+
+charToWord32 :: Char -> Word32
+charToWord32 = toEnum . fromEnum
 
 password :: C.ByteString
-password = C.pack "misosoup" 
-
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+password = C.pack "misosoup"
 
 ports :: [String]
 ports = ["80", "443", "22", "21", "2222", "53"]
@@ -61,10 +78,10 @@ ports = ["80", "443", "22", "21", "2222", "53"]
 endpoint :: String
 endpoint = "capsulecorp.org"
 
-secret :: String 
+secret :: String
 secret = "sup"
 
-detection :: String 
+detection :: String
 detection = "yo"
 
 data Handle = Handle
@@ -84,7 +101,7 @@ open hostname port =
     -- Look up the hostname and port.  Either raises an exception
     -- or returns a nonempty list.  First element in that list
     -- is supposed to be the best option.
-    let hints = defaultHints { addrSocketType = Stream, addrFamily = AF_INET }
+    let hints = defaultHints {addrSocketType = Stream, addrFamily = AF_INET}
     addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
     let addr = Prelude.head addrinfos
 
@@ -94,8 +111,8 @@ open hostname port =
     -- Save off the socket, program name, and server address in a handle
     return $ Handle sock (addrAddress addr)
 
-  -- Now you may use connectionSocket as you please within this scope,
-  -- possibly using recv and send to interact with the remote end.
+-- Now you may use connectionSocket as you please within this scope,
+-- possibly using recv and send to interact with the remote end.
 
 toStrict :: BL.ByteString -> B.ByteString
 toStrict = B.concat . BL.toChunks
@@ -121,15 +138,14 @@ close handler = Network.Socket.close (sock handler)
 
 -- TODO: sequence_ $ blastIt "capsulecorp.org" "watup" [ 1 .. 4000 ]
 -- use that style on main, also, allow other protocols (UDP)
-blastIt :: 
+blastIt ::
   -- | Remote hostname, or localhost
-  String -> 
+  String ->
   -- | Series of ports, i.e. [ 1.. 400 ] or the defined `ports` variable
-  [Int] -> [IO (Maybe ())]
+  [Int] ->
+  [IO (Maybe ())]
 blastIt hostname ports = fmap (\p -> blast hostname p) ports
 
-interfaces :: IO [NetworkInterface]
+interfaces :: IO [NI.NetworkInterface]
 interfaces = do
-  getNetworkInterfaces
-
-
+  NI.getNetworkInterfaces
