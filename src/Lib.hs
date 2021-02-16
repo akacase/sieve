@@ -44,6 +44,9 @@ import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
 import System.Timeout (timeout)
 
+intToCInt :: Int -> CInt
+intToCInt = fromIntegral
+
 instance ToJSON NI.NetworkInterface where
   toJSON i =
     object
@@ -98,21 +101,15 @@ open ::
   IO Handle
 open hostname port =
   do
-    -- Look up the hostname and port.  Either raises an exception
-    -- or returns a nonempty list.  First element in that list
-    -- is supposed to be the best option.
     let hints = defaultHints {addrSocketType = Stream, addrFamily = AF_INET}
     addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
     let addr = Prelude.head addrinfos
 
-    -- Establish a socket for communication
-    sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+    -- intToCInt 6 for TCP 17 for UDP
+    -- Stream for TCP and Datagram for UDP
+    sock <- socket (addrFamily addr) Stream $ intToCInt 6
     connect sock (addrAddress addr)
-    -- Save off the socket, program name, and server address in a handle
     return $ Handle sock (addrAddress addr)
-
--- Now you may use connectionSocket as you please within this scope,
--- possibly using recv and send to interact with the remote end.
 
 toStrict :: BL.ByteString -> B.ByteString
 toStrict = B.concat . BL.toChunks
