@@ -31,7 +31,7 @@ import Network.Socket
     SockAddr,
     Socket,
     SocketOption (SendTimeOut, UserTimeout),
-    SocketType (Raw, Stream, Datagram),
+    SocketType (Datagram, Raw, Stream),
     close,
     connect,
     defaultHints,
@@ -129,9 +129,10 @@ send info handler = do
   Network.Socket.close (sock handler)
 
 blast :: String -> Int -> Protocol -> IO (Maybe ())
-blast hostname port proto  = do
-  h <- case proto of TCP -> open hostname (show port) Stream 6
-                     UDP -> open hostname (show port) Datagram 17
+blast hostname port proto = do
+  h <- case proto of
+    TCP -> open hostname (show port) Stream 6
+    UDP -> open hostname (show port) Datagram 17
   inter <- interfaces
   -- timeout of 2 seconds
   timeout 2000000 $ send (Info inter port) h
