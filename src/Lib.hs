@@ -83,12 +83,6 @@ ports = ["80", "443", "22", "21", "2222", "53"]
 endpoint :: String
 endpoint = "capsulecorp.org"
 
-secret :: String
-secret = "sup"
-
-detection :: String
-detection = "yo"
-
 data Handle = Handle
   { sock :: Socket,
     address :: SockAddr
@@ -101,7 +95,7 @@ open ::
   String ->
   -- | Type of Socket to connect
   SocketType ->
-  -- | Socket identifier
+  -- | Protocol identifier
   Int ->
   -- | Handle to use for logging
   IO Handle
@@ -147,6 +141,7 @@ blastIt ::
   String ->
   -- | Series of ports, i.e. [ 1.. 400 ] or the defined `ports` variable
   [Int] ->
+  -- | Type of Protocl -- UDP | TCP
   Protocol ->
   [IO (Maybe ())]
 blastIt hostname ports protocol = fmap (\p -> blast hostname p protocol) ports
