@@ -1,5 +1,6 @@
-{ mkDerivation, aeson, base, bytestring, hostname, lib, network
-, network-bsd, network-info, network-simple, text, triplesec
+{ mkDerivation, aeson, base, bytestring, hostname, lens, lib
+, network, network-bsd, network-info, network-simple, split, text
+, triplesec
 }:
 mkDerivation {
   pname = "sieve";
@@ -8,8 +9,8 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    aeson base bytestring hostname network network-bsd network-info
-    network-simple text triplesec
+    aeson base bytestring hostname lens network network-bsd
+    network-info network-simple split text triplesec
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [ base ];

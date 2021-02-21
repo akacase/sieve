@@ -8,11 +8,13 @@ module Lib
   )
 where
 
+import Control.Concurrent (forkIO)
 import Crypto.TripleSec (decrypt, encryptIO)
 import Data.Aeson
 import Data.Aeson.Encoding
 import Data.Bits
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BL
 import Data.List (genericDrop)
@@ -28,20 +30,26 @@ import Network.Socket
   ( AddrInfo (addrAddress, addrFamily, addrProtocol, addrSocketType),
     Family (AF_INET),
     HostName,
-    SockAddr,
+    PortNumber,
+    SockAddr (SockAddrInet),
     Socket,
     SocketOption (SendTimeOut, UserTimeout),
     SocketType (Datagram, Raw, Stream),
+    accept,
+    bind,
     close,
     connect,
     defaultHints,
     defaultProtocol,
     getAddrInfo,
+    listen,
     setSocketOption,
     socket,
+    withSocketsDo,
   )
 import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
+import System.IO (hSetBuffering)
 import System.Timeout (timeout)
 
 intToCInt :: Int -> CInt
@@ -149,3 +157,25 @@ blastIt hostname ports protocol = fmap (\p -> blast hostname p protocol) ports
 interfaces :: IO [NI.NetworkInterface]
 interfaces = do
   NI.getNetworkInterfaces
+
+server :: PortNumber -> IO ()
+server port = withSocketsDo $ do
+  sock <- socket AF_INET Stream defaultProtocol
+  bind sock (SockAddrInet port 0)
+  listen sock 5
+  sockHandler sock
+  Network.Socket.close sock
+
+sockHandler :: Socket -> IO ()
+sockHandler sock = do
+  (sockh, _) <- accept sock
+  forkIO $ putStrLn "Client connected!" >> receiveMessage sockh
+  sockHandler sock
+
+receiveMessage :: Socket -> IO ()
+receiveMessage sockh = do
+  msg <- recv sockh 4096
+  B8.putStrLn msg
+  if msg == B8.pack "q" || B8.null msg
+    then Network.Socket.close sockh >> putStrLn "Client disconnected"
+    else receiveMessage sockh
