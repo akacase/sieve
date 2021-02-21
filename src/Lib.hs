@@ -9,7 +9,7 @@ module Lib
 where
 
 import Control.Concurrent (forkIO)
-import Crypto.TripleSec (decrypt, encryptIO)
+import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson
 import Data.Aeson.Encoding
 import Data.Bits
@@ -118,13 +118,10 @@ open hostname port socktype protocol =
     connect sock (addrAddress addr)
     return $ Handle sock (addrAddress addr)
 
-toStrict :: BL.ByteString -> B.ByteString
-toStrict = B.concat . BL.toChunks
-
 send :: Info -> Handle -> IO ()
 send info handler = do
   print (encode $ info)
-  msg <- (encryptIO password $ toStrict $ encode info)
+  msg <- (encryptIO password $ BL.toStrict $ encode info)
   sendAll
     (sock handler)
     msg
@@ -175,7 +172,12 @@ sockHandler sock = do
 receiveMessage :: Socket -> IO ()
 receiveMessage sockh = do
   msg <- recv sockh 4096
-  B8.putStrLn msg
-  if msg == B8.pack "q" || B8.null msg
-    then Network.Socket.close sockh >> putStrLn "Client disconnected"
-    else receiveMessage sockh
+  case runTripleSecDecryptM $ decrypt password msg of
+    Left err -> Network.Socket.close sockh >> putStrLn "Client disconnected"
+    Right dec -> do
+      -- TODO: fix decode
+      case decode $ BL.fromStrict dec :: Maybe Storable of
+        Just d -> do
+          print d
+          Network.Socket.close sockh >> putStrLn "Client disconnected"
+        Nothing -> putStrLn "nothin"
