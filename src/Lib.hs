@@ -166,9 +166,11 @@ interfaces :: IO [NI.NetworkInterface]
 interfaces = do
   NI.getNetworkInterfaces
 
-server :: PortNumber -> IO ()
-server port = withSocketsDo $ do
-  sock <- socket AF_INET Stream defaultProtocol
+server :: PortNumber -> Protocol -> IO ()
+server port proto = withSocketsDo $ do
+  sock <- case proto of
+    TCP -> socket AF_INET Stream 6
+    UDP -> socket AF_INET Datagram 17
   bind sock (SockAddrInet port 0)
   listen sock 5
   sockHandler sock
