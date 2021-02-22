@@ -9,6 +9,7 @@ module Lib
 where
 
 import Control.Concurrent (forkIO)
+import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson
 import Data.Aeson.Encoding
@@ -172,27 +173,37 @@ server port proto = withSocketsDo $ do
     TCP -> socket AF_INET Stream 6
     UDP -> socket AF_INET Datagram 17
   bind sock (SockAddrInet port 0)
-  listen sock 5
-  sockHandler sock
+  case proto of 
+    TCP -> do
+      listen sock 5
+      sockHandler sock
+    UDP -> do
+      forever $ receiveMessage sock UDP
   Network.Socket.close sock
 
 sockHandler :: Socket -> IO ()
 sockHandler sock = do
   (sockh, _) <- accept sock
-  forkIO $ putStrLn "Client connected!" >> receiveMessage sockh
+  forkIO $ receiveMessage sockh TCP
   sockHandler sock
 
-receiveMessage :: Socket -> IO ()
-receiveMessage sockh = do
+receiveMessage :: Socket -> Protocol -> IO ()
+receiveMessage sockh proto = do
   msg <- recv sockh 4096
   case runTripleSecDecryptM $ decrypt password msg of
-    Left err -> Network.Socket.close sockh >> putStrLn "Client disconnected"
+    Left err -> do
+      case proto of
+        TCP -> Network.Socket.close sockh
+        UDP -> pure ()
     Right dec -> do
-      -- TODO: fix decode
-      case decode $ BL.fromStrict dec :: Maybe [Storable] of
+      case decode $ BL.fromStrict dec :: Maybe Storage of
         Just d -> do
           print d
-          Network.Socket.close sockh >> putStrLn "Client disconnected"
+          case proto of
+            TCP -> Network.Socket.close sockh
+            UDP -> pure ()
         Nothing -> do
-          putStrLn "nothin"
-          Network.Socket.close sockh >> putStrLn "Client disconnected"
+          case proto of
+            TCP -> Network.Socket.close sockh
+            UDP -> pure ()
+
