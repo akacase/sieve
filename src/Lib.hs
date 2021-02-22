@@ -60,7 +60,8 @@ instance ToJSON NI.NetworkInterface where
     object
       [ "name" .= show (NI.name i),
         "ipv4" .= show (NI.ipv4 i),
-        "ipv6" .= show (NI.ipv6 i)
+        "ipv6" .= show (NI.ipv6 i),
+        "mac" .= show (NI.mac i)
       ]
 
 data Info = Info
@@ -76,6 +77,16 @@ data Storable = Storable
     ipv6 :: String
   }
   deriving (Show, Generic, FromJSON, ToJSON)
+
+data Storage = Storage
+
+  { networks :: [Storable],
+    scannedPort :: Int 
+  }
+  deriving (Show, Generic, ToJSON)
+
+instance FromJSON Storage where
+  parseJSON (Object v) = Storage <$> v .: "net" <*> v .: "port"
 
 data Protocol = TCP | UDP
 
@@ -176,8 +187,10 @@ receiveMessage sockh = do
     Left err -> Network.Socket.close sockh >> putStrLn "Client disconnected"
     Right dec -> do
       -- TODO: fix decode
-      case decode $ BL.fromStrict dec :: Maybe Storable of
+      case decode $ BL.fromStrict dec :: Maybe [Storable] of
         Just d -> do
           print d
           Network.Socket.close sockh >> putStrLn "Client disconnected"
-        Nothing -> putStrLn "nothin"
+        Nothing -> do
+          putStrLn "nothin"
+          Network.Socket.close sockh >> putStrLn "Client disconnected"
