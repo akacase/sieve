@@ -5,6 +5,8 @@
 
 module Lib
   ( blastIt,
+    server,
+    Protocol(TCP,UDP),
   )
 where
 

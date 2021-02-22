@@ -3,4 +3,5 @@ module Main where
 import Lib
 
 main :: IO ()
-main = someFunc
+main = do
+  server 6666 TCP
