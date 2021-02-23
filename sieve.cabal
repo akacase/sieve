@@ -46,7 +46,7 @@ library
       , lens
   default-language: Haskell2010
 
-executable sieve-exe
+executable sieve
   main-is: Main.hs
   other-modules:
       Paths_sieve

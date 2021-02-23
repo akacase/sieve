@@ -134,7 +134,6 @@ open hostname port socktype protocol =
 
 send :: Info -> Handle -> IO ()
 send info handler = do
-  print (encode $ info)
   msg <- (encryptIO password $ BL.toStrict $ encode info)
   sendAll
     (sock handler)
