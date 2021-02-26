@@ -7,14 +7,16 @@ module Lib
   ( blastIt,
     server,
     Protocol(TCP,UDP),
+    Args,
   )
 where
 
 import Control.Concurrent (forkIO)
 import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
-import Data.Aeson
-import Data.Aeson.Encoding
+import Data.Aeson.Types 
+import Data.Aeson (encode, decode, toJSON, parseJSON, ToJSON, FromJSON)
+import Data.Aeson.Encoding 
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
@@ -67,6 +69,13 @@ instance ToJSON NI.NetworkInterface where
         "mac" .= show (NI.mac i)
       ]
 
+data Args = Args {
+  ports :: String, -- export PORTS
+  endpoint :: String, -- export ENDPOINT
+  secret :: String, -- export SECRET
+  tout :: Int -- export TIMEOUT
+} deriving (Show, Eq)
+
 data Info = Info
   { net :: [NI.NetworkInterface],
     port :: Int
@@ -92,18 +101,6 @@ instance FromJSON Storage where
   parseJSON (Object v) = Storage <$> v .: "net" <*> v .: "port"
 
 data Protocol = TCP | UDP
-
-charToWord32 :: Char -> Word32
-charToWord32 = toEnum . fromEnum
-
-password :: C.ByteString
-password = C.pack "misosoup"
-
-ports :: [String]
-ports = ["80", "443", "22", "21", "2222", "53"]
-
-endpoint :: String
-endpoint = "capsulecorp.org"
 
 data Handle = Handle
   { sock :: Socket,
@@ -132,22 +129,22 @@ open hostname port socktype protocol =
     connect sock (addrAddress addr)
     return $ Handle sock (addrAddress addr)
 
-send :: Info -> Handle -> IO ()
-send info handler = do
-  msg <- (encryptIO password $ BL.toStrict $ encode info)
+send :: Args -> Info -> Handle -> IO ()
+send cmd info handler = do
+  msg <- (encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info)
   sendAll
     (sock handler)
     msg
   Network.Socket.close (sock handler)
 
-blast :: String -> Int -> Protocol -> IO (Maybe ())
-blast hostname port proto = do
+blast :: String -> Int -> Protocol -> Args -> IO (Maybe ())
+blast hostname port proto cmd = do
   h <- case proto of
     TCP -> open hostname (show port) Stream 6
     UDP -> open hostname (show port) Datagram 17
   inter <- interfaces
-  -- timeout of 2 seconds
-  timeout 2000000 $ send (Info inter port) h
+  -- timeout of 2 seconds, i.e. 2000000 is default
+  timeout (tout cmd) $ send cmd (Info inter port) h
 
 close :: Handle -> IO ()
 close handler = Network.Socket.close (sock handler)
@@ -161,15 +158,16 @@ blastIt ::
   [Int] ->
   -- | Type of Protocl -- UDP | TCP
   Protocol ->
+  Args ->
   [IO (Maybe ())]
-blastIt hostname ports protocol = fmap (\p -> blast hostname p protocol) ports
+blastIt hostname ports protocol cmd = fmap (\p -> blast hostname p protocol cmd) ports
 
 interfaces :: IO [NI.NetworkInterface]
 interfaces = do
   NI.getNetworkInterfaces
 
-server :: PortNumber -> Protocol -> IO ()
-server port proto = withSocketsDo $ do
+server :: PortNumber -> Protocol -> Args -> IO ()
+server port proto cmd = withSocketsDo $ do
   sock <- case proto of
     TCP -> socket AF_INET Stream 6
     UDP -> socket AF_INET Datagram 17
@@ -177,21 +175,21 @@ server port proto = withSocketsDo $ do
   case proto of 
     TCP -> do
       listen sock 5
-      sockHandler sock
+      sockHandler sock cmd
     UDP -> do
-      forever $ receiveMessage sock UDP
+      forever $ receiveMessage sock UDP cmd
   Network.Socket.close sock
 
-sockHandler :: Socket -> IO ()
-sockHandler sock = do
+sockHandler :: Socket -> Args -> IO ()
+sockHandler sock cmd = do
   (sockh, _) <- accept sock
-  forkIO $ receiveMessage sockh TCP
-  sockHandler sock
+  forkIO $ receiveMessage sockh TCP cmd
+  sockHandler sock cmd
 
-receiveMessage :: Socket -> Protocol -> IO ()
-receiveMessage sockh proto = do
+receiveMessage :: Socket -> Protocol -> Args -> IO ()
+receiveMessage sockh proto cmd = do
   msg <- recv sockh 4096
-  case runTripleSecDecryptM $ decrypt password msg of
+  case runTripleSecDecryptM $ decrypt (C.pack $ secret cmd) msg of
     Left err -> do
       case proto of
         TCP -> Network.Socket.close sockh

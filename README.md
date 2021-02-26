@@ -48,15 +48,6 @@ secret :: String
 export SECRET = "sup"
 ```
 
-And last but not least, a **detection** value; this is just a shared string so you can search through the web server logs to find.
-
-```haskell
-detection :: String
-```
-```sh
-export DETECTION = "yo"
-```
-
 **sieve** runs under the assumption that it's being deployed on `x86_64`, but _should_ accomodate any architecture that **GHC** supports.
 
 _make it rain_

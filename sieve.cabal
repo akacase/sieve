@@ -44,6 +44,7 @@ library
       , text
       , split
       , lens
+      , envy
   default-language: Haskell2010
 
 executable sieve

@@ -3,7 +3,6 @@ module Main where
 import Lib
 import System.Environment   
 import Control.Concurrent (forkIO)
-import Control.Monad (forever)
 
 main = do
   (command : args) <- getArgs
