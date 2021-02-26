@@ -69,14 +69,17 @@ instance ToJSON NI.NetworkInterface where
         "mac" .= show (NI.mac i)
       ]
 
-data Args = Args {
-  ports :: String, -- export PORTS
-  endpoint :: String, -- export ENDPOINT
-  secret :: String, -- export SECRET
-  tout :: Int -- export TIMEOUT
-} deriving (Show, Eq)
+data Args = Args
+  { serverPort :: PortNumber, --  "PORT"
+    ports :: String, -- "PORTS"
+    endpoint :: String, -- "ENDPOINT"
+    secret :: String, -- "SECRET"
+    tout :: Int -- "TIMEOUT"
+  }
+  deriving (Show, Eq)
 
 data Info = Info
+
   { net :: [NI.NetworkInterface],
     port :: Int
   }
@@ -166,30 +169,30 @@ interfaces :: IO [NI.NetworkInterface]
 interfaces = do
   NI.getNetworkInterfaces
 
-server :: PortNumber -> Protocol -> Args -> IO ()
-server port proto cmd = withSocketsDo $ do
+server :: Protocol -> Args -> IO ()
+server proto args = withSocketsDo $ do
   sock <- case proto of
     TCP -> socket AF_INET Stream 6
     UDP -> socket AF_INET Datagram 17
-  bind sock (SockAddrInet port 0)
+  bind sock (SockAddrInet (serverPort args) 0)
   case proto of 
     TCP -> do
       listen sock 5
-      sockHandler sock cmd
+      sockHandler sock args
     UDP -> do
-      forever $ receiveMessage sock UDP cmd
+      forever $ receiveMessage sock UDP args
   Network.Socket.close sock
 
 sockHandler :: Socket -> Args -> IO ()
-sockHandler sock cmd = do
+sockHandler sock args = do
   (sockh, _) <- accept sock
-  forkIO $ receiveMessage sockh TCP cmd
-  sockHandler sock cmd
+  forkIO $ receiveMessage sockh TCP args
+  sockHandler sock args
 
 receiveMessage :: Socket -> Protocol -> Args -> IO ()
-receiveMessage sockh proto cmd = do
+receiveMessage sockh proto args = do
   msg <- recv sockh 4096
-  case runTripleSecDecryptM $ decrypt (C.pack $ secret cmd) msg of
+  case runTripleSecDecryptM $ decrypt (C.pack $ secret args) msg of
     Left err -> do
       case proto of
         TCP -> Network.Socket.close sockh
