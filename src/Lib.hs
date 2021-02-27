@@ -171,16 +171,19 @@ interfaces = do
 
 server :: Protocol -> Args -> IO ()
 server proto args = withSocketsDo $ do
-  handle <- openFile (filename args) ReadWriteMode
   sock <- case proto of
     TCP -> socket AF_INET Stream 6
     UDP -> socket AF_INET Datagram 17
   bind sock (SockAddrInet (fromIntegral (serverPort args) :: PortNumber) 0)
   case proto of
     TCP -> do
+      let file = filename args ++ "_tcp.json"
+      handle <- openFile file  ReadWriteMode
       listen sock 5
       sockHandler sock args handle
     UDP -> do
+      let file = filename args ++ "_udp.json"
+      handle <- openFile file ReadWriteMode
       forever $ receiveMessage sock UDP args handle
   Network.Socket.close sock
 
@@ -201,6 +204,7 @@ receiveMessage sockh proto args handle = do
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
         Just d -> do
+          putStrLn $ show d
           hPutStr handle $ C.unpack dec
           case proto of
             TCP -> Network.Socket.close sockh
