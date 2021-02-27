@@ -13,14 +13,27 @@ getArgsEnv =
   runEnv $
     gFromEnvCustom
       defOption
-      (Just (Args 6666 "80, 443, 22, 21, 2222, 53" "capsulecorp.org" "misosoup" 2000000))
+      (Just (Args 6666 "80, 443, 22, 21, 2222, 53" "capsulecorp.org" "misosoup" "sieve.json" 2000000))
 
 main = do
   (command : args) <- getArgs
   env <- getArgsEnv
-  if command == "server"
-    then do
-      forkIO $ server TCP env
-      server UDP env
-    else pure ()
+  case env of
+    Left error -> putStrLn error
+    Right e ->
+      if command == "server"
+        then do
+          forkIO $ server TCP e
+          server UDP e
+        else
+          if command == "blast"
+            then do
+              if (head args) == "tcp"
+                then do
+                  blastIt e TCP
+                else blastIt e UDP
+              pure ()
+            else pure ()
+
+
 

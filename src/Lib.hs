@@ -6,24 +6,24 @@
 module Lib
   ( blastIt,
     server,
-    Protocol(TCP,UDP),
-    Args,
+    Protocol (TCP, UDP),
+    Args (..),
   )
 where
 
 import Control.Concurrent (forkIO)
 import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
-import Data.Aeson.Types 
-import Data.Aeson (encode, decode, toJSON, parseJSON, ToJSON, FromJSON)
-import Data.Aeson.Encoding 
+import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
+import Data.Aeson.Encoding
+import Data.Aeson.Types
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BL
 import Data.List (genericDrop)
-import Data.List.Split
+import Data.List.Split as S
 import Data.Text as T
 import Data.Word
 import Foreign.C
@@ -54,7 +54,7 @@ import Network.Socket
   )
 import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
-import System.IO (hSetBuffering)
+import System.IO (Handle, IOMode (ReadWriteMode), hPutStr, hSetBuffering, openFile)
 import System.Timeout (timeout)
 
 intToCInt :: Int -> CInt
@@ -70,16 +70,16 @@ instance ToJSON NI.NetworkInterface where
       ]
 
 data Args = Args
-  { serverPort :: PortNumber, --  "PORT"
+  { serverPort :: Int, --  "PORT"
     ports :: String, -- "PORTS"
     endpoint :: String, -- "ENDPOINT"
     secret :: String, -- "SECRET"
+    filename :: String, -- "FILENAME"
     tout :: Int -- "TIMEOUT"
   }
-  deriving (Show, Eq)
+  deriving (Show, Generic, Eq)
 
 data Info = Info
-
   { net :: [NI.NetworkInterface],
     port :: Int
   }
@@ -94,9 +94,8 @@ data Storable = Storable
   deriving (Show, Generic, FromJSON, ToJSON)
 
 data Storage = Storage
-
   { networks :: [Storable],
-    scannedPort :: Int 
+    scannedPort :: Int
   }
   deriving (Show, Generic, ToJSON)
 
@@ -105,7 +104,7 @@ instance FromJSON Storage where
 
 data Protocol = TCP | UDP
 
-data Handle = Handle
+data Handler = Handler
   { sock :: Socket,
     address :: SockAddr
   }
@@ -119,8 +118,8 @@ open ::
   SocketType ->
   -- | Protocol identifier
   Int ->
-  -- | Handle to use for logging
-  IO Handle
+  -- | Handler to use for logging
+  IO Handler
 open hostname port socktype protocol =
   do
     let hints = defaultHints {addrSocketType = Stream, addrFamily = AF_INET}
@@ -130,9 +129,9 @@ open hostname port socktype protocol =
     -- Stream for TCP and Datagram for UDP
     sock <- socket (addrFamily addr) socktype $ intToCInt protocol
     connect sock (addrAddress addr)
-    return $ Handle sock (addrAddress addr)
+    return $ Handler sock (addrAddress addr)
 
-send :: Args -> Info -> Handle -> IO ()
+send :: Args -> Info -> Handler -> IO ()
 send cmd info handler = do
   msg <- (encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info)
   sendAll
@@ -140,30 +139,31 @@ send cmd info handler = do
     msg
   Network.Socket.close (sock handler)
 
-blast :: String -> Int -> Protocol -> Args -> IO (Maybe ())
+blast :: String -> String -> Protocol -> Args -> IO ()
 blast hostname port proto cmd = do
   h <- case proto of
-    TCP -> open hostname (show port) Stream 6
-    UDP -> open hostname (show port) Datagram 17
+    TCP -> open hostname port Stream 6
+    UDP -> open hostname port Datagram 17
   inter <- interfaces
+  t <- timeout (tout cmd) $ send cmd (Info inter (read port :: Int)) h
   -- timeout of 2 seconds, i.e. 2000000 is default
-  timeout (tout cmd) $ send cmd (Info inter port) h
+  case t of
+    Just _ -> pure ()
+    Nothing -> pure ()
 
-close :: Handle -> IO ()
+close :: Handler -> IO ()
 close handler = Network.Socket.close (sock handler)
 
--- TODO: sequence_ $ blastIt "capsulecorp.org" "watup" [ 1 .. 4000 ]
--- use that style on main, also, allow other protocols (UDP)
 blastIt ::
-  -- | Remote hostname, or localhost
-  String ->
-  -- | Series of ports, i.e. [ 1.. 400 ] or the defined `ports` variable
-  [Int] ->
-  -- | Type of Protocl -- UDP | TCP
-  Protocol ->
   Args ->
-  [IO (Maybe ())]
-blastIt hostname ports protocol cmd = fmap (\p -> blast hostname p protocol cmd) ports
+  Protocol ->
+  IO ()
+blastIt args protocol = do
+  let hostname = (endpoint args)
+  let pts = S.splitOn "," (ports args)
+  -- place holder to hold error values
+  let t = fmap (\p -> blast hostname p protocol args) pts
+  pure ()
 
 interfaces :: IO [NI.NetworkInterface]
 interfaces = do
@@ -171,26 +171,27 @@ interfaces = do
 
 server :: Protocol -> Args -> IO ()
 server proto args = withSocketsDo $ do
+  handle <- openFile (filename args) ReadWriteMode
   sock <- case proto of
     TCP -> socket AF_INET Stream 6
     UDP -> socket AF_INET Datagram 17
-  bind sock (SockAddrInet (serverPort args) 0)
-  case proto of 
+  bind sock (SockAddrInet (fromIntegral (serverPort args) :: PortNumber) 0)
+  case proto of
     TCP -> do
       listen sock 5
-      sockHandler sock args
+      sockHandler sock args handle
     UDP -> do
-      forever $ receiveMessage sock UDP args
+      forever $ receiveMessage sock UDP args handle
   Network.Socket.close sock
 
-sockHandler :: Socket -> Args -> IO ()
-sockHandler sock args = do
+sockHandler :: Socket -> Args -> Handle -> IO ()
+sockHandler sock args handle = do
   (sockh, _) <- accept sock
-  forkIO $ receiveMessage sockh TCP args
-  sockHandler sock args
+  forkIO $ receiveMessage sockh TCP args handle
+  sockHandler sock args handle
 
-receiveMessage :: Socket -> Protocol -> Args -> IO ()
-receiveMessage sockh proto args = do
+receiveMessage :: Socket -> Protocol -> Args -> Handle -> IO ()
+receiveMessage sockh proto args handle = do
   msg <- recv sockh 4096
   case runTripleSecDecryptM $ decrypt (C.pack $ secret args) msg of
     Left err -> do
@@ -200,7 +201,7 @@ receiveMessage sockh proto args = do
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
         Just d -> do
-          print d
+          hPutStr handle $ C.unpack dec
           case proto of
             TCP -> Network.Socket.close sockh
             UDP -> pure ()
@@ -208,4 +209,3 @@ receiveMessage sockh proto args = do
           case proto of
             TCP -> Network.Socket.close sockh
             UDP -> pure ()
-
