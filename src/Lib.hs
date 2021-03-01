@@ -55,7 +55,7 @@ import Network.Socket
   )
 import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
-import System.IO (Handle, IOMode (ReadWriteMode), hPutStr, hSetBuffering, openFile)
+import System.IO (Handle, IOMode (AppendMode), hPutStr, hFlush, hSetBuffering, openFile)
 import System.Timeout (timeout)
 
 intToCInt :: Int -> CInt
@@ -163,12 +163,12 @@ close handler = Network.Socket.close (sock handler)
 blastIt ::
   Args ->
   Protocol ->
-  [IO ()]
+  IO [()]
 blastIt args protocol = do
   let hostname = (endpoint args)
   let comb = T.unpack . T.strip . T.pack
   let pts = S.splitOn "," (ports args)
-  fmap (\p -> blast hostname p protocol args) $ fmap (\p -> comb p) pts
+  mapM (\p -> blast hostname p protocol args) $ fmap (\p -> comb p) pts
 
 interfaces :: IO [NI.NetworkInterface]
 interfaces = do
@@ -183,12 +183,12 @@ server proto args = withSocketsDo $ do
   case proto of
     TCP -> do
       let file = filename args ++ "_tcp.json"
-      handle <- openFile file  ReadWriteMode
+      handle <- openFile file AppendMode
       listen sock 5
       sockHandler sock args handle
     UDP -> do
       let file = filename args ++ "_udp.json"
-      handle <- openFile file ReadWriteMode
+      handle <- openFile file AppendMode
       forever $ receiveMessage sock UDP args handle
   Network.Socket.close sock
 
@@ -209,8 +209,12 @@ receiveMessage sockh proto args handle = do
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
         Just d -> do
-          putStrLn $ show d
-          hPutStr handle $ C.unpack dec
+          h <- try $ hPutStr handle $ C.unpack dec :: IO (Either IOError ())
+          case h of
+            Right _ -> do
+              hFlush handle
+              pure ()
+            Left _ -> pure ()
           case proto of
             TCP -> Network.Socket.close sockh
             UDP -> pure ()
@@ -218,3 +222,4 @@ receiveMessage sockh proto args handle = do
           case proto of
             TCP -> Network.Socket.close sockh
             UDP -> pure ()
+

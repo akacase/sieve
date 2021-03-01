@@ -13,8 +13,10 @@ getArgsEnv =
   runEnv $
     gFromEnvCustom
       defOption
-      (Just (Args 6666 "80, 443, 22, 21, 2222, 6666, 53" "127.0.0.1" "misosoup" "sieve.json" 2000000))
+      (Just (Args 6666 "80, 443, 22, 21, 2222, 6666, 53" "127.0.0.1" "misosoup" "sieve" 2000000))
 
+
+main :: IO ()
 main = do
   (command : args) <- getArgs
   env <- getArgsEnv
@@ -30,8 +32,8 @@ main = do
             then do
               if (head args) == "tcp"
                 then do
-                  head $ blastIt e TCP
-                else head $ blastIt e UDP
+                  blastIt e TCP
+                else blastIt e UDP
               pure ()
             else pure ()
 
