@@ -55,6 +55,7 @@ import Network.Socket
   )
 import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
+import qualified Network.HostName as H
 import System.IO (Handle, IOMode (AppendMode), hFlush, hPutStr, hSetBuffering, openFile)
 import System.Timeout (timeout)
 
@@ -83,7 +84,8 @@ data Args = Args
 data Info = Info
   { net :: [NI.NetworkInterface],
     port :: Int,
-    protocol :: Protocol
+    protocol :: Protocol,
+    hostname :: H.HostName
   }
   deriving (Show, Generic, ToJSON)
 
@@ -152,7 +154,8 @@ blast hostname port proto cmd = do
     TCP -> open hostname port Stream 6
     UDP -> open hostname port Datagram 17
   inter <- interfaces
-  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int) proto) h :: IO (Either SomeException (Maybe ()))
+  host <- H.getHostName
+  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int) proto host) h :: IO (Either SomeException (Maybe ()))
   -- timeout of 2 seconds, i.e. 2000000 is default
   case t of
     Right _ -> pure ()
@@ -206,7 +209,7 @@ receiveMessage sockh proto args handle = do
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
         Just d -> do
-          h <- try $ hPutStr handle $ C.unpack dec :: IO (Either IOError ())
+          h <- try $ hPutStr handle $ C.unpack dec ++ "\n" :: IO (Either IOError ())
           case h of
             Right _ -> do
               hFlush handle

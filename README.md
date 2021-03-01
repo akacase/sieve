@@ -37,7 +37,7 @@ export ENDPOINT = "127.0.0.1"
 
 This must not contain any protocol information, just a DNS record, without the `.`
 
-**sieve** requires two other important pieces of information to run correctly:
+**sieve** requires one other important piece of information to run correctly:
 
 a **secret** to symmetrically encrypt the payload it's trying to blast out:
 
@@ -45,7 +45,7 @@ a **secret** to symmetrically encrypt the payload it's trying to blast out:
 secret :: String
 ```
 ```sh
-export SECRET = "sup"
+export SECRET = "misosoup"
 ```
 
 **sieve** runs under the assumption that it's being deployed on `x86_64`, but _should_ accomodate any architecture that **GHC** supports.
@@ -54,6 +54,8 @@ To test it locally for fun, you can run it via cabal:
 
 ```sh
 cabal run sieve server
+# or if you have nix    
+nix-shell -p ghc cabal-install --run 'cabal run sieve server'
 ```
 
 Will boot up the server locally, and by default listen on port `6666`
@@ -64,6 +66,9 @@ To blast it, and possibly other ports if you have your firewall configured corre
 # to blast ports 22 and 6666
 PORTS="22, 6666" cabal run sieve blast udp
 PORTS="22, 6666" cabal run sieve blast tcp
+# in nix
+nix-shell -p ghc cabal-install --run 'PORTS="22, 6666" cabal run sieve blast tcp'
+nix-shell -p ghc cabal-install --run 'PORTS="22, 6666" cabal run sieve blast udp'
 ```
 
 If you set this up in real life, the `iptables`, `nftables` or `pf` rules to forward all TCP/UDP traffic to a single port on an endpoint is a must. As you blast from the client to the remote host, the firewall will funnel all traffic into `sieve` to do its job, decrypt or drop a connection.
