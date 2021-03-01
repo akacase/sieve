@@ -12,7 +12,7 @@ module Lib
 where
 
 import Control.Concurrent (forkIO)
-import Control.Exception (try, SomeException)
+import Control.Exception (SomeException, try)
 import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
@@ -55,7 +55,7 @@ import Network.Socket
   )
 import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
-import System.IO (Handle, IOMode (AppendMode), hPutStr, hFlush, hSetBuffering, openFile)
+import System.IO (Handle, IOMode (AppendMode), hFlush, hPutStr, hSetBuffering, openFile)
 import System.Timeout (timeout)
 
 intToCInt :: Int -> CInt
@@ -131,7 +131,7 @@ open hostname port socktype protocol =
     -- Stream for TCP and Datagram for UDP
     sock <- socket (addrFamily addr) socktype $ intToCInt protocol
     t <- try $ connect sock (addrAddress addr)
-    case t of 
+    case t of
       Right _ -> return $ Right $ Handler sock (addrAddress addr)
       Left e -> return $ Left e
 
@@ -152,7 +152,7 @@ blast hostname port proto cmd = do
     TCP -> open hostname port Stream 6
     UDP -> open hostname port Datagram 17
   inter <- interfaces
-  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int) proto) h :: IO(Either SomeException (Maybe ()))
+  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int) proto) h :: IO (Either SomeException (Maybe ()))
   -- timeout of 2 seconds, i.e. 2000000 is default
   case t of
     Right _ -> pure ()
@@ -219,4 +219,3 @@ receiveMessage sockh proto args handle = do
           case proto of
             TCP -> Network.Socket.close sockh
             UDP -> pure ()
-
