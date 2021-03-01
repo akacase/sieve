@@ -23,6 +23,8 @@ main = do
   case env of
     Left error -> putStrLn error
     Right e ->
+      -- TODO: start file handle at top-level and pass it into `server`
+      -- TODO: add UDP/TCP identifiers and hostname to client
       if command == "server"
         then do
           forkIO $ server TCP e
