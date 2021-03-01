@@ -82,7 +82,8 @@ data Args = Args
 
 data Info = Info
   { net :: [NI.NetworkInterface],
-    port :: Int
+    port :: Int,
+    protocol :: Protocol
   }
   deriving (Show, Generic, ToJSON)
 
@@ -103,7 +104,7 @@ data Storage = Storage
 instance FromJSON Storage where
   parseJSON (Object v) = Storage <$> v .: "net" <*> v .: "port"
 
-data Protocol = TCP | UDP
+data Protocol = TCP | UDP deriving (Show, Generic, FromJSON, ToJSON)
 
 data Handler = Handler
   { sock :: Socket,
@@ -151,7 +152,7 @@ blast hostname port proto cmd = do
     TCP -> open hostname port Stream 6
     UDP -> open hostname port Datagram 17
   inter <- interfaces
-  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int)) h :: IO(Either SomeException (Maybe ()))
+  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int) proto) h :: IO(Either SomeException (Maybe ()))
   -- timeout of 2 seconds, i.e. 2000000 is default
   case t of
     Right _ -> pure ()
@@ -174,21 +175,17 @@ interfaces :: IO [NI.NetworkInterface]
 interfaces = do
   NI.getNetworkInterfaces
 
-server :: Protocol -> Args -> IO ()
-server proto args = withSocketsDo $ do
+server :: Protocol -> Args -> Handle -> IO ()
+server proto args handle = withSocketsDo $ do
   sock <- case proto of
     TCP -> socket AF_INET Stream 6
     UDP -> socket AF_INET Datagram 17
   bind sock (SockAddrInet (fromIntegral (serverPort args) :: PortNumber) 0)
   case proto of
     TCP -> do
-      let file = filename args ++ "_tcp.json"
-      handle <- openFile file AppendMode
       listen sock 5
       sockHandler sock args handle
     UDP -> do
-      let file = filename args ++ "_udp.json"
-      handle <- openFile file AppendMode
       forever $ receiveMessage sock UDP args handle
   Network.Socket.close sock
 

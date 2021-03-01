@@ -7,13 +7,14 @@ import GHC.Generics
 import Lib
 import System.Environment
 import System.Envy
+import System.IO (Handle, IOMode (AppendMode), openFile)
 
 getArgsEnv :: IO (Either String Args)
 getArgsEnv =
   runEnv $
     gFromEnvCustom
       defOption
-      (Just (Args 6666 "80, 443, 22, 21, 2222, 6666, 53" "127.0.0.1" "misosoup" "sieve" 2000000))
+      (Just (Args 6666 "80, 443, 22, 21, 2222, 6666, 53" "127.0.0.1" "misosoup" "sieve.json" 2000000))
 
 
 main :: IO ()
@@ -27,8 +28,9 @@ main = do
       -- TODO: add UDP/TCP identifiers and hostname to client
       if command == "server"
         then do
-          forkIO $ server TCP e
-          server UDP e
+          handle <- openFile (filename e) AppendMode
+          forkIO $ server TCP e handle
+          server UDP e handle
         else
           if command == "blast"
             then do
