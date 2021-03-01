@@ -12,6 +12,7 @@ module Lib
 where
 
 import Control.Concurrent (forkIO)
+import Control.Exception (try, SomeException)
 import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
@@ -119,7 +120,7 @@ open ::
   -- | Protocol identifier
   Int ->
   -- | Handler to use for logging
-  IO Handler
+  IO (Either SomeException Handler)
 open hostname port socktype protocol =
   do
     let hints = defaultHints {addrSocketType = Stream, addrFamily = AF_INET}
@@ -128,16 +129,21 @@ open hostname port socktype protocol =
 
     -- Stream for TCP and Datagram for UDP
     sock <- socket (addrFamily addr) socktype $ intToCInt protocol
-    connect sock (addrAddress addr)
-    return $ Handler sock (addrAddress addr)
+    t <- try $ connect sock (addrAddress addr)
+    case t of 
+      Right _ -> return $ Right $ Handler sock (addrAddress addr)
+      Left e -> return $ Left e
 
-send :: Args -> Info -> Handler -> IO ()
+send :: Args -> Info -> (Either SomeException Handler) -> IO ()
 send cmd info handler = do
-  msg <- (encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info)
-  sendAll
-    (sock handler)
-    msg
-  Network.Socket.close (sock handler)
+  case handler of
+    Right h -> do
+      msg <- (encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info)
+      sendAll
+        (sock h)
+        msg
+      Network.Socket.close (sock h)
+    Left _ -> pure ()
 
 blast :: String -> String -> Protocol -> Args -> IO ()
 blast hostname port proto cmd = do
@@ -145,11 +151,11 @@ blast hostname port proto cmd = do
     TCP -> open hostname port Stream 6
     UDP -> open hostname port Datagram 17
   inter <- interfaces
-  t <- timeout (tout cmd) $ send cmd (Info inter (read port :: Int)) h
+  t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int)) h :: IO(Either SomeException (Maybe ()))
   -- timeout of 2 seconds, i.e. 2000000 is default
   case t of
-    Just _ -> pure ()
-    Nothing -> pure ()
+    Right _ -> pure ()
+    Left _ -> pure ()
 
 close :: Handler -> IO ()
 close handler = Network.Socket.close (sock handler)
@@ -157,13 +163,12 @@ close handler = Network.Socket.close (sock handler)
 blastIt ::
   Args ->
   Protocol ->
-  IO ()
+  [IO ()]
 blastIt args protocol = do
   let hostname = (endpoint args)
+  let comb = T.unpack . T.strip . T.pack
   let pts = S.splitOn "," (ports args)
-  -- place holder to hold error values
-  let t = fmap (\p -> blast hostname p protocol args) pts
-  pure ()
+  fmap (\p -> blast hostname p protocol args) $ fmap (\p -> comb p) pts
 
 interfaces :: IO [NI.NetworkInterface]
 interfaces = do

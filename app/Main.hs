@@ -30,8 +30,8 @@ main = do
             then do
               if (head args) == "tcp"
                 then do
-                  blastIt e TCP
-                else blastIt e UDP
+                  head $ blastIt e TCP
+                else head $ blastIt e UDP
               pure ()
             else pure ()
 
