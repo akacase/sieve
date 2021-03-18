@@ -12,6 +12,7 @@ pros:
 
 cons:
 - it might ruin your day
+- it's mostly `IO`
 
 **sieve** is a essentialy a TCP/UDP blast, it ACKs out to a single host (a web server) trying to poke out of typical ports, right now these default to:
 
