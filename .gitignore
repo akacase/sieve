@@ -4,3 +4,4 @@ newdist
 *~
 result
 *.json
+.direnv
