@@ -1,36 +1,45 @@
 {
-  description = "infrastructure straining";
-
+  description = "sieve's description";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
+      flake = false;
+    };
   };
-
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = inputs@{ self, nixpkgs, flake-utils, ... }:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
-
-        haskellPackages = pkgs.haskellPackages;
-
-        jailbreakUnbreak = pkg:
-          pkgs.haskell.lib.doJailbreak (pkg.overrideAttrs (_: { meta = { }; }));
-
-        packageName = "sieve";
+        overlays = [ ];
+        pkgs =
+          import nixpkgs { inherit system overlays; config.allowBroken = true; };
+        project = returnShellEnv:
+          pkgs.haskellPackages.developPackage {
+            inherit returnShellEnv;
+            name = "sieve";
+            root = ./.;
+            withHoogle = false;
+            overrides = self: super: with pkgs.haskell.lib; {
+              # Use callCabal2nix to override Haskell dependencies here
+              # cf. https://tek.brick.do/K3VXJd8mEKO7
+            };
+            modifier = drv:
+              pkgs.haskell.lib.addBuildTools drv (with pkgs.haskellPackages;
+              [
+                cabal-fmt
+                cabal-install
+                ghcid
+                haskell-language-server
+                ormolu
+                pkgs.nixpkgs-fmt
+              ]);
+          };
       in
       {
-        packages.${packageName} =
-          haskellPackages.callCabal2nix packageName self rec { };
+        # Used by `nix build` & `nix run` (prod exe)
+        defaultPackage = project false;
 
-        defaultPackage = self.packages.${system}.${packageName};
-
-        devShell = pkgs.mkShell {
-          buildInputs = with haskellPackages; [
-            haskell-language-server
-            ghcid
-            cabal-install
-          ];
-          inputsFrom = builtins.attrValues self.packages.${system};
-        };
+        # Used by `nix develop` (dev shell)
+        devShell = project true;
       });
 }
