@@ -1,5 +1,5 @@
 {
-  description = "sieve's description";
+  description = "infrastructure straining";
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
     flake-compat = {
@@ -20,8 +20,6 @@
             root = ./.;
             withHoogle = false;
             overrides = self: super: with pkgs.haskell.lib; {
-              # Use callCabal2nix to override Haskell dependencies here
-              # cf. https://tek.brick.do/K3VXJd8mEKO7
             };
             modifier = drv:
               pkgs.haskell.lib.addBuildTools drv (with pkgs.haskellPackages;
