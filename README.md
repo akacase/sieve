@@ -2,18 +2,22 @@
 
 ![sieve](./doc/sieve.png)
 
-**sieve** tests the endpoints it's been deployed on if they are leaky 💦, like a _sieve_. 
-
+**sieve** tests the endpoints it's been deployed on if they are leaky 💦, like a _sieve_.
 
 pros:
+
 - it's written in **haskell**
 - it's configurable via environment variables
 - it works
 
 cons:
+
 - it might ruin your day
 - it's mostly `IO`
 
+todo:
+
+- move to `dhall` as an alternate for configuration instead of environment variables
 **sieve** is a essentialy a TCP/UDP blast, it ACKs out to a single host (a web server) trying to poke out of typical ports, right now these default to:
 
 ```haskell
@@ -32,6 +36,7 @@ You must set a host for **sieve** to know who to ACK to:
 ```haskell
 endpoint :: String
 ```
+
 ```sh
 export ENDPOINT = "127.0.0.1"
 ```
@@ -45,6 +50,7 @@ a **secret** to symmetrically encrypt the payload it's trying to blast out:
 ```haskell
 secret :: String
 ```
+
 ```sh
 export SECRET = "misosoup"
 ```
@@ -73,5 +79,3 @@ nix-shell -p ghc cabal-install --run 'PORTS="22, 6666" cabal run sieve blast udp
 ```
 
 If you set this up in real life, the `iptables`, `nftables` or `pf` rules to forward all TCP/UDP traffic to a single port on an endpoint is a must. As you blast from the client to the remote host, the firewall will funnel all traffic into `sieve` to do its job, decrypt or drop a connection.
-
-_make it rain_
