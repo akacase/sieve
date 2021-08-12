@@ -12,24 +12,31 @@ module Lib
 where
 
 import Control.Concurrent (forkIO)
+import Control.Applicative ( Alternative(empty) )
 import Control.Exception (SomeException, try)
 import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
-import Data.Aeson.Encoding
+import Data.Aeson.Encoding ()
 import Data.Aeson.Types
-import Data.Bits
+    ( (.:),
+      object,
+      FromJSON(parseJSON),
+      Value(Object),
+      KeyValue((.=)),
+      ToJSON(toJSON) )
+import Data.Bits ()
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BL
 import Data.List (genericDrop)
-import Data.List.Split as S
-import Data.Text as T
-import Data.Word
-import Foreign.C
+import Data.List.Split as S ( splitOn )
+import Data.Text as T ( pack, strip, unpack )
+import Data.Word ()
+import Foreign.C ( CInt )
 import Foreign.C.Types (CInt)
-import GHC.Generics
+import GHC.Generics ( Generic )
 import Network.BSD (HostName, defaultProtocol)
 import qualified Network.Info as NI
 import Network.Socket
@@ -89,11 +96,17 @@ data Info = Info
   }
   deriving (Show, Generic, ToJSON)
 
+newtype Name = Name String deriving (Show, Generic, FromJSON, ToJSON)
+newtype Mac = Mac String deriving (Show, Generic, FromJSON, ToJSON)
+newtype IPv4 = IPv4 String deriving (Show, Generic, FromJSON, ToJSON)
+newtype IPv6 = IPv6 String deriving (Show, Generic, FromJSON, ToJSON)
+newtype Port = Port String deriving (Show, Generic, FromJSON, ToJSON)
+
 data Storable = Storable
-  { name :: String,
-    mac :: String,
-    ipv4 :: String,
-    ipv6 :: String
+  { name :: Name,
+    mac :: Mac,
+    ipv4 :: IPv4,
+    ipv6 :: IPv6 
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
@@ -105,6 +118,7 @@ data Storage = Storage
 
 instance FromJSON Storage where
   parseJSON (Object v) = Storage <$> v .: "net" <*> v .: "port"
+  parseJSON _ = empty
 
 data Protocol = TCP | UDP deriving (Show, Generic, FromJSON, ToJSON)
 
@@ -137,11 +151,11 @@ open hostname port socktype protocol =
       Right _ -> return $ Right $ Handler sock (addrAddress addr)
       Left e -> return $ Left e
 
-send :: Args -> Info -> (Either SomeException Handler) -> IO ()
-send cmd info handler = do
+send :: Args -> Info -> Either SomeException Handler -> IO ()
+send cmd info handler =
   case handler of
     Right h -> do
-      msg <- (encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info)
+      msg <- encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info
       sendAll
         (sock h)
         msg
@@ -169,13 +183,13 @@ blastIt ::
   Protocol ->
   IO [()]
 blastIt args protocol = do
-  let hostname = (endpoint args)
+  let hostname = endpoint args
   let comb = T.unpack . T.strip . T.pack
   let pts = S.splitOn "," (ports args)
-  mapM (\p -> blast hostname p protocol args) $ fmap (\p -> comb p) pts
+  mapM (\p -> blast hostname p protocol args) $ fmap comb pts
 
 interfaces :: IO [NI.NetworkInterface]
-interfaces = do
+interfaces =
   NI.getNetworkInterfaces
 
 server :: Protocol -> Args -> Handle -> IO ()
@@ -188,7 +202,7 @@ server proto args handle = withSocketsDo $ do
     TCP -> do
       listen sock 5
       sockHandler sock args handle
-    UDP -> do
+    UDP ->
       forever $ receiveMessage sock UDP args handle
   Network.Socket.close sock
 
