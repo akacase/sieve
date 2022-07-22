@@ -41,10 +41,9 @@ library
       , lens
       , envy
   default-language: Haskell2010
-  mixins:
-    base hiding (Prelude),
-    relude (Relude as Prelude, Relude.Container.One),
-    relude
+  mixins:              base hiding (Prelude)
+                     , relude (Relude as Prelude)
+                     , relude
   ghc-options:
     -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
     -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
@@ -99,10 +98,9 @@ executable sieve
       Paths_sieve
   hs-source-dirs:
       app
-  mixins:
-    base hiding (Prelude),
-    relude (Relude as Prelude, Relude.Container.One),
-    relude
+  mixins:              base hiding (Prelude)
+                     , relude (Relude as Prelude)
+                     , relude
   ghc-options:
     -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
     -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls

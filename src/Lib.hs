@@ -139,7 +139,7 @@ open ::
 open hostname port socktype protocol =
   do
     addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
-    let addr = head addrinfos
+    let addr = head $ addrinfos
 
     -- Stream for TCP and Datagram for UDP
     sock <- socket (addrFamily addr) socktype $ intToCInt protocol
