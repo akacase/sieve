@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Lib
   ( blastIt,
@@ -11,33 +10,35 @@ module Lib
   )
 where
 
+import Control.Applicative (Alternative (empty))
 import Control.Concurrent (forkIO)
-import Control.Applicative ( Alternative(empty) )
 import Control.Exception (SomeException, try)
 import Control.Monad (forever)
 import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
 import Data.Aeson.Encoding ()
 import Data.Aeson.Types
-    ( (.:),
-      object,
-      FromJSON(parseJSON),
-      Value(Object),
-      KeyValue((.=)),
-      ToJSON(toJSON) )
+  ( FromJSON (parseJSON),
+    KeyValue ((.=)),
+    ToJSON (toJSON),
+    Value (Object),
+    object,
+    (.:),
+  )
 import Data.Bits ()
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BL
 import Data.List (genericDrop)
-import Data.List.Split as S ( splitOn )
-import Data.Text as T ( pack, strip, unpack )
+import Data.List.Split as S (splitOn)
+import Data.Text as T (pack, strip, unpack)
 import Data.Word ()
-import Foreign.C ( CInt )
+import Foreign.C (CInt)
 import Foreign.C.Types (CInt)
-import GHC.Generics ( Generic )
+import GHC.Generics (Generic)
 import Network.BSD (HostName, defaultProtocol)
+import qualified Network.HostName as H
 import qualified Network.Info as NI
 import Network.Socket
   ( AddrInfo (addrAddress, addrFamily, addrProtocol, addrSocketType),
@@ -62,7 +63,6 @@ import Network.Socket
   )
 import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
-import qualified Network.HostName as H
 import System.IO (Handle, IOMode (AppendMode), hFlush, hPutStr, hSetBuffering, openFile)
 import System.Timeout (timeout)
 
@@ -96,17 +96,23 @@ data Info = Info
   }
   deriving (Show, Generic, ToJSON)
 
-newtype Name = Name String deriving (Show, Generic, FromJSON, ToJSON)
-newtype Mac = Mac String deriving (Show, Generic, FromJSON, ToJSON)
-newtype IPv4 = IPv4 String deriving (Show, Generic, FromJSON, ToJSON)
-newtype IPv6 = IPv6 String deriving (Show, Generic, FromJSON, ToJSON)
-newtype Port = Port String deriving (Show, Generic, FromJSON, ToJSON)
+type Name = String
+
+type Mac = String
+
+type IPv4 = String
+
+type IPv6 = String
+
+type Port = String
+
+type Hostname = String
 
 data Storable = Storable
   { name :: Name,
     mac :: Mac,
     ipv4 :: IPv4,
-    ipv6 :: IPv6 
+    ipv6 :: IPv6
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
@@ -162,7 +168,7 @@ send cmd info handler =
       Network.Socket.close (sock h)
     Left _ -> pure ()
 
-blast :: String -> String -> Protocol -> Args -> IO ()
+blast :: Hostname -> Port -> Protocol -> Args -> IO ()
 blast hostname port proto cmd = do
   h <- case proto of
     TCP -> open hostname port Stream 6
