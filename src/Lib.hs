@@ -1,69 +1,53 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 module Lib
   ( blastIt,
     server,
     Protocol (TCP, UDP),
-    Args (..),
-  )
+    Args (..), close')
 where
 
 import Control.Applicative (Alternative (empty))
 import Control.Concurrent (forkIO)
 import Control.Exception (SomeException, try)
 import Control.Monad (forever)
-import Crypto.TripleSec (TripleSecException, decrypt, encryptIO, runTripleSecDecryptM)
+import Crypto.TripleSec (decrypt, encryptIO, runTripleSecDecryptM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
 import Data.Aeson.Encoding ()
 import Data.Aeson.Types
-  ( FromJSON (parseJSON),
-    KeyValue ((.=)),
-    ToJSON (toJSON),
+  ( KeyValue ((.=)),
     Value (Object),
     object,
     (.:),
   )
 import Data.Bits ()
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BL
-import Data.List (genericDrop)
 import Data.List.Split as S (splitOn)
 import Data.Text as T (pack, strip, unpack)
 import Data.Word ()
 import Foreign.C (CInt)
-import Foreign.C.Types (CInt)
 import GHC.Generics (Generic)
-import Network.BSD (HostName, defaultProtocol)
+import Network.BSD (HostName)
 import qualified Network.HostName as H
 import qualified Network.Info as NI
 import Network.Socket
-  ( AddrInfo (addrAddress, addrFamily, addrProtocol, addrSocketType),
+  ( AddrInfo (..),
     Family (AF_INET),
-    HostName,
     PortNumber,
     SockAddr (SockAddrInet),
     Socket,
-    SocketOption (SendTimeOut, UserTimeout),
-    SocketType (Datagram, Raw, Stream),
+    SocketType (Datagram, Stream),
     accept,
     bind,
     close,
     connect,
     defaultHints,
-    defaultProtocol,
     getAddrInfo,
     listen,
-    setSocketOption,
     socket,
     withSocketsDo,
   )
-import Network.Socket.Address (sendAllTo, sendTo)
 import Network.Socket.ByteString (recv, sendAll)
-import System.IO (Handle, IOMode (AppendMode), hFlush, hPutStr, hSetBuffering, openFile)
+import System.IO (Handle, hFlush, hPutStr)
 import System.Timeout (timeout)
 
 intToCInt :: Int -> CInt
@@ -86,15 +70,16 @@ data Args = Args
     filename :: String, -- "FILENAME"
     tout :: Int -- "TIMEOUT"
   }
-  deriving (Show, Generic, Eq)
+  deriving stock (Show, Generic, Eq)
 
 data Info = Info
-  { net :: [NI.NetworkInterface],
-    port :: Int,
-    protocol :: Protocol,
-    hostname :: H.HostName
+  { infoNet :: [NI.NetworkInterface],
+    infoPort :: Int,
+    infoProtocol :: Protocol,
+    infoHostname :: H.HostName
   }
-  deriving (Show, Generic, ToJSON)
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 type Name = String
 
@@ -108,29 +93,36 @@ type Port = String
 
 type Hostname = String
 
+type Socket = String
+
 data Storable = Storable
   { name :: Name,
     mac :: Mac,
     ipv4 :: IPv4,
     ipv6 :: IPv6
   }
-  deriving (Show, Generic, FromJSON, ToJSON)
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data Storage = Storage
   { networks :: [Storable],
     scannedPort :: Int
   }
-  deriving (Show, Generic, ToJSON)
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 instance FromJSON Storage where
   parseJSON (Object v) = Storage <$> v .: "net" <*> v .: "port"
   parseJSON _ = empty
 
-data Protocol = TCP | UDP deriving (Show, Generic, FromJSON, ToJSON)
+data Protocol = TCP | UDP 
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
 
 data Handler = Handler
-  { sock :: Socket,
-    address :: SockAddr
+  { handlerSock :: Network.Socket.Socket,
+    handlerAddress :: Network.Socket.SockAddr
   }
 
 open ::
@@ -139,22 +131,21 @@ open ::
   -- | Port number or name
   String ->
   -- | Type of Socket to connect
-  SocketType ->
+  Network.Socket.SocketType ->
   -- | Protocol identifier
   Int ->
   -- | Handler to use for logging
   IO (Either SomeException Handler)
 open hostname port socktype protocol =
   do
-    let hints = defaultHints {addrSocketType = Stream, addrFamily = AF_INET}
-    addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
+    addrinfos <- Network.Socket.getAddrInfo (Just Network.Socket.defaultHints) (Just hostname) (Just port)
     let addr = Prelude.head addrinfos
 
     -- Stream for TCP and Datagram for UDP
-    sock <- socket (addrFamily addr) socktype $ intToCInt protocol
-    t <- try $ connect sock (addrAddress addr)
+    sock <- Network.Socket.socket (Network.Socket.addrFamily addr) socktype $ intToCInt protocol
+    t <- try $ Network.Socket.connect sock (Network.Socket.addrAddress addr)
     case t of
-      Right _ -> return $ Right $ Handler sock (addrAddress addr)
+      Right _ -> return $ Right $ Handler sock (Network.Socket.addrAddress addr)
       Left e -> return $ Left e
 
 send :: Args -> Info -> Either SomeException Handler -> IO ()
@@ -163,16 +154,16 @@ send cmd info handler =
     Right h -> do
       msg <- encryptIO (C.pack $ secret cmd) $ BL.toStrict $ encode info
       sendAll
-        (sock h)
+        (handlerSock h)
         msg
-      Network.Socket.close (sock h)
+      Network.Socket.close (handlerSock h)
     Left _ -> pure ()
 
 blast :: Hostname -> Port -> Protocol -> Args -> IO ()
 blast hostname port proto cmd = do
   h <- case proto of
-    TCP -> open hostname port Stream 6
-    UDP -> open hostname port Datagram 17
+    TCP -> open hostname port Network.Socket.Stream 6
+    UDP -> open hostname port Network.Socket.Datagram 17
   inter <- interfaces
   host <- H.getHostName
   t <- try $ timeout (tout cmd) $ send cmd (Info inter (read port :: Int) proto host) h :: IO (Either SomeException (Maybe ()))
@@ -181,8 +172,8 @@ blast hostname port proto cmd = do
     Right _ -> pure ()
     Left _ -> pure ()
 
-close :: Handler -> IO ()
-close handler = Network.Socket.close (sock handler)
+close' :: Handler -> IO ()
+close' handler = Network.Socket.close (handlerSock handler)
 
 blastIt ::
   Args ->
@@ -199,36 +190,36 @@ interfaces =
   NI.getNetworkInterfaces
 
 server :: Protocol -> Args -> Handle -> IO ()
-server proto args handle = withSocketsDo $ do
+server proto args handle = Network.Socket.withSocketsDo $ do
   sock <- case proto of
-    TCP -> socket AF_INET Stream 6
-    UDP -> socket AF_INET Datagram 17
-  bind sock (SockAddrInet (fromIntegral (serverPort args) :: PortNumber) 0)
+    TCP -> Network.Socket.socket Network.Socket.AF_INET Network.Socket.Stream 6
+    UDP -> Network.Socket.socket Network.Socket.AF_INET Network.Socket.Datagram 17
+  Network.Socket.bind sock (Network.Socket.SockAddrInet (fromIntegral (serverPort args) :: Network.Socket.PortNumber) 0)
   case proto of
     TCP -> do
-      listen sock 5
+      Network.Socket.listen sock 5
       sockHandler sock args handle
     UDP ->
       forever $ receiveMessage sock UDP args handle
   Network.Socket.close sock
 
-sockHandler :: Socket -> Args -> Handle -> IO ()
+sockHandler :: Network.Socket.Socket -> Args -> Handle -> IO ()
 sockHandler sock args handle = do
-  (sockh, _) <- accept sock
-  forkIO $ receiveMessage sockh TCP args handle
+  (sockh, _) <- Network.Socket.accept sock
+  _ <- forkIO $ receiveMessage sockh TCP args handle
   sockHandler sock args handle
 
-receiveMessage :: Socket -> Protocol -> Args -> Handle -> IO ()
+receiveMessage :: Network.Socket.Socket -> Protocol -> Args -> Handle -> IO ()
 receiveMessage sockh proto args handle = do
   msg <- recv sockh 4096
   case runTripleSecDecryptM $ decrypt (C.pack $ secret args) msg of
-    Left err -> do
+    Left _ -> do
       case proto of
         TCP -> Network.Socket.close sockh
         UDP -> pure ()
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
-        Just d -> do
+        Just _ -> do
           h <- try $ hPutStr handle $ C.unpack dec ++ "\n" :: IO (Either IOError ())
           case h of
             Right _ -> do
