@@ -1,13 +1,14 @@
-{-# LANGUAGE DeriveGeneric #-}
+
 
 module Main where
 
 import Control.Concurrent (forkIO)
-import GHC.Generics
+import GHC.Generics ()
 import Lib
-import System.Environment
-import System.Envy
-import System.IO (Handle, IOMode (AppendMode), openFile)
+    ( Protocol(UDP, TCP), Args(Args, filename), blastIt, server )
+import System.Environment ( getArgs )
+import System.Envy ( defOption, gFromEnvCustom, runEnv )
+import System.IO (IOMode (AppendMode), openFile)
 
 getArgsEnv :: IO (Either String Args)
 getArgsEnv =
@@ -21,19 +22,18 @@ main = do
   (command : args) <- getArgs
   env <- getArgsEnv
   case env of
-    Left error -> putStrLn error
+    Left err -> putStrLn err
     Right e ->
       if command == "server"
         then do
           handle <- openFile (filename e) AppendMode
-          forkIO $ server TCP e handle
+          _ <- forkIO $ server TCP e handle
           server UDP e handle
         else
           if command == "blast"
             then do
-              if (head args) == "tcp"
-                then do
-                  blastIt e TCP
+              _ <- if head args == "tcp"
+                then blastIt e TCP
                 else blastIt e UDP
               pure ()
             else pure ()
