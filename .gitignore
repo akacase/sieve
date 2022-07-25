@@ -5,3 +5,7 @@ newdist
 result
 *.json
 .direnv
+cache/
+build/
+packagedb/
+*.tar.gz
