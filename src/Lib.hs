@@ -9,18 +9,15 @@ module Lib
   )
 where
 
-import Control.Applicative (Alternative (empty))
 import Control.Concurrent (forkIO)
 import Control.Exception (SomeException, try)
 import Control.Monad (forever)
 import Crypto.TripleSec (decrypt, encryptIO, runTripleSecDecryptM)
-import Data.Aeson (FromJSON, ToJSON, decode, encode, parseJSON, toJSON)
+import Data.Aeson (FromJSON, ToJSON, decode, encode, toJSON, Value (Object), (.:))
 import Data.Aeson.Encoding ()
 import Data.Aeson.Types
   ( KeyValue ((.=)),
-    Value (Object),
-    object,
-    (.:),
+    object, FromJSON (parseJSON),
   )
 import Data.Bits ()
 import Data.ByteString.Char8 qualified as C
@@ -53,6 +50,7 @@ import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import System.IO (Handle, hFlush, hPutStr)
 import System.Timeout (timeout)
+import Control.Applicative (empty)
 
 intToCInt :: Int -> CInt
 intToCInt = fromIntegral
@@ -60,10 +58,10 @@ intToCInt = fromIntegral
 instance ToJSON NetworkInterface where
   toJSON i =
     object
-      [ "name" .= show (name i),
-        "ipv4" .= show (ipv4 i),
-        "ipv6" .= show (ipv6 i),
-        "mac" .= show (mac i)
+      [ "storableName" .= show (name i),
+        "storableIPv4" .= show (ipv4 i),
+        "storableIPv6" .= show (ipv6 i),
+        "storableMac" .= show (mac i)
       ]
 
 data Args = Args
@@ -87,17 +85,15 @@ data Info = Info
 
 type Name = String
 
-type Mac = String
+type Port = String
+
+type Hostname = String
 
 type IPv4 = String
 
 type IPv6 = String
 
-type Port = String
-
-type Hostname = String
-
-type Sock = String
+type Mac = String
 
 data Storable = Storable
   { storableName :: Name,
@@ -116,7 +112,7 @@ data Storage = Storage
   deriving anyclass (ToJSON)
 
 instance FromJSON Storage where
-  parseJSON (Object v) = Storage <$> v .: "net" <*> v .: "port"
+  parseJSON (Object v) = Storage <$> v .: "infoNet" <*> v .: "infoPort"
   parseJSON _ = empty
 
 data Protocol = TCP | UDP
@@ -129,7 +125,7 @@ open ::
   -- | Remote hostname, or localhost
   HostName ->
   -- | Port number or name
-  Sock ->
+  Port ->
   -- | Type of Socket to connect
   SocketType ->
   -- | Protocol identifier
@@ -139,13 +135,13 @@ open ::
 open hostname port socktype protocol =
   do
     addrinfos <- getAddrInfo (Just defaultHints) (Just hostname) (Just port)
-    let addr = head $ addrinfos
+    let addr = head addrinfos
 
     -- Stream for TCP and Datagram for UDP
     sock <- socket (addrFamily addr) socktype $ intToCInt protocol
     t <- try $ connect sock (addrAddress addr)
     case t of
-      Right _ -> return $ Right $ Handler sock 
+      Right _ -> return $ Right $ Handler sock
       Left e -> return $ Left e
 
 send :: Args -> Info -> Either SomeException Handler -> IO ()
@@ -209,27 +205,30 @@ sockHandler sock args handle = do
   _ <- forkIO $ receiveMessage sockh TCP args handle
   sockHandler sock args handle
 
+sockCloser :: Protocol -> Socket -> IO ()
+sockCloser proto sockh = do
+  case proto of
+    TCP -> close sockh
+    UDP -> pure ()
+
 receiveMessage :: Socket -> Protocol -> Args -> Handle -> IO ()
 receiveMessage sockh proto args handle = do
   msg <- recv sockh 4096
+  print $ runTripleSecDecryptM $ decrypt (C.pack $ secret args) msg
   case runTripleSecDecryptM $ decrypt (C.pack $ secret args) msg of
     Left _ -> do
-      case proto of
-        TCP -> close sockh
-        UDP -> pure ()
+      sockCloser proto sockh
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
         Just _ -> do
+          print ("made it" :: String)
           h <- try $ hPutStr handle $ C.unpack dec ++ "\n" :: IO (Either IOError ())
           case h of
             Right _ -> do
               hFlush handle
               pure ()
             Left _ -> pure ()
-          case proto of
-            TCP -> close sockh
-            UDP -> pure ()
+          sockCloser proto sockh
         Nothing -> do
-          case proto of
-            TCP -> close sockh
-            UDP -> pure ()
+          print ("made it to nothing" :: String)
+          sockCloser proto sockh
