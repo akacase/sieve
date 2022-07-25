@@ -5,7 +5,6 @@ module Lib
     server,
     Protocol (TCP, UDP),
     Args (..),
-    close',
   )
 where
 
@@ -167,9 +166,6 @@ blast hostname port proto cmd = do
   case t of
     Right _ -> pure ()
     Left _ -> pure ()
-
-close' :: Handler -> IO ()
-close' handler = close (handlerSock handler)
 
 blastIt ::
   Args ->
