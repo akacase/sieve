@@ -17,7 +17,8 @@ cons:
 
 todo:
 
-- move to `dhall` as an alternate for configuration instead of environment variables
+- use `dhall` as an alternate for configuration instead of environment variables
+- write `nix` module for deployment via flakes to easily deploy the server piece with the correct `iptables` settings
 
 **sieve** is a essentialy a TCP/UDP blast, it ACKs out to a single host (a web server) trying to poke out of typical ports, right now these default to:
 
@@ -62,8 +63,6 @@ To test it locally for fun, you can run it via cabal:
 
 ```sh
 cabal run sieve server
-# or if you have nix    
-nix-shell -p ghc cabal-install --run 'cabal run sieve server'
 ```
 
 Will boot up the server locally, and by default listen on port `6666`
@@ -74,9 +73,6 @@ To blast it, and possibly other ports if you have your firewall configured corre
 # to blast ports 22 and 6666
 PORTS="22, 6666" cabal run sieve blast udp
 PORTS="22, 6666" cabal run sieve blast tcp
-# in nix
-nix-shell -p ghc cabal-install --run 'PORTS="22, 6666" cabal run sieve blast tcp'
-nix-shell -p ghc cabal-install --run 'PORTS="22, 6666" cabal run sieve blast udp'
 ```
 
 If you set this up in real life, the `iptables`, `nftables` or `pf` rules to forward all TCP/UDP traffic to a single port on an endpoint is a must. As you blast from the client to the remote host, the firewall will funnel all traffic into `sieve` to do its job, decrypt or drop a connection.
