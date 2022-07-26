@@ -217,7 +217,6 @@ receiveMessage sockh proto args handle = do
     Right dec -> do
       case decode $ BL.fromStrict dec :: Maybe Storage of
         Just _ -> do
-          print ("made it" :: String)
           h <- try $ hPutStr handle $ C.unpack dec ++ "\n" :: IO (Either IOError ())
           case h of
             Right _ -> do
@@ -226,5 +225,4 @@ receiveMessage sockh proto args handle = do
             Left _ -> pure ()
           sockCloser proto sockh
         Nothing -> do
-          print ("made it to nothing" :: String)
           sockCloser proto sockh
